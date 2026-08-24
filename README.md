@@ -11,12 +11,27 @@ No API keys, no build step, no runtime dependencies. Node 23+ runs the TypeScrip
 ## Commands
 
 ```
-tradelog check <solana|base> <address>    run the seven checks
+tradelog check <solana|base> <address>    run the checks
 tradelog log <buy|sell|pass> [flags]      record an entry
 tradelog review                           forward return on everything, passes included
 tradelog stats                            edge summary vs holding SOL
 tradelog callers                          hit rate by source
+tradelog market                           regime: fear/greed, BTC & SOL trend, DEX volume
+tradelog scan [chain]                     trending pools, unvetted
 ```
+
+## Data sources
+
+Every source is free and keyless. No account, no billing, nothing to leak.
+
+| Source | Gives | Limit |
+|---|---|---|
+| DexScreener | price, liquidity, volume, pair age across all pairs | 60/min |
+| GeckoTerminal | hourly OHLCV, trending pools | 10/min, throttled in client |
+| Solana RPC | mint authority, freeze authority, holder concentration | public node rate-limits |
+| Binance | BTC and SOL daily candles for regime | generous |
+| alternative.me | fear & greed index | none stated |
+| DefiLlama | Solana DEX volume | none stated |
 
 ## Checks
 
@@ -30,6 +45,8 @@ because a check that silently reports "unknown" as "fine" is worse than no check
 | Mint authority revoked | Solana only | RPC `getAccountInfo` |
 | Freeze authority revoked | Solana only | RPC `getAccountInfo` |
 | Top 10 holder concentration (40%) | Solana only | RPC `getTokenLargestAccounts` |
+| Volume trend, last 6h vs prior 6h | yes | GeckoTerminal OHLCV |
+| Drawdown from 168h high | yes | GeckoTerminal OHLCV |
 | Contract powers | manual | verified source |
 | Sellability | manual | test sell |
 | Deployer history | manual | explorer |

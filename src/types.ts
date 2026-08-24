@@ -1,3 +1,5 @@
+import type { Momentum } from "./geckoterminal.ts";
+
 export type Chain = "solana" | "base";
 
 export type CheckStatus = "pass" | "fail" | "manual";
@@ -19,6 +21,7 @@ export type CheckReport = {
   liqUsd: number | null;
   vol24hUsd: number | null;
   pairAgeHours: number | null;
+  momentum: Momentum | null;
   checks: Check[];
   verdict: Verdict;
 };

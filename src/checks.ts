@@ -1,4 +1,5 @@
 import { fetchPairs, summarise } from "./dexscreener.ts";
+import { fetchCandles, momentum, topPoolAddress } from "./geckoterminal.ts";
 import { fetchHolderConcentration, fetchMintAuthorities } from "./solana.ts";
 import type { Chain, Check, CheckReport, Verdict } from "./types.ts";
 
@@ -110,6 +111,26 @@ export async function runChecks(chain: Chain, address: string): Promise<CheckRep
     detail: `Trace the deployer on ${EXPLORER[chain]}${address} — serial launchers repeat.`,
   });
 
+  const pool = await topPoolAddress(chain, address);
+  const candles = pool ? await fetchCandles(chain, pool) : [];
+  const trend = momentum(candles);
+
+  if (trend) {
+    checks.push({
+      name: "Volume trend (6h)",
+      status: trend.volumeTrend > -40 ? "pass" : "fail",
+      detail:
+        `${trend.volumeTrend > 0 ? "+" : ""}${trend.volumeTrend.toFixed(0)}% versus the prior 6h. ` +
+        (trend.volumeTrend < -40 ? "Interest is draining." : "Still trading."),
+    });
+    checks.push({
+      name: "Drawdown from high",
+      status: trend.drawdownFromHigh > -60 ? "pass" : "fail",
+      detail:
+        `${trend.drawdownFromHigh.toFixed(0)}% off the ${trend.candles}h high, set ${trend.hoursSinceHigh.toFixed(0)}h ago.`,
+    });
+  }
+
   return {
     chain,
     address,
@@ -119,6 +140,7 @@ export async function runChecks(chain: Chain, address: string): Promise<CheckRep
     liqUsd,
     vol24hUsd,
     pairAgeHours,
+    momentum: trend,
     checks,
     verdict: verdictOf(checks),
   };
@@ -131,6 +153,7 @@ function verdictOf(checks: Check[]): Verdict {
 }
 
 export function fmt(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
   return n.toFixed(2);

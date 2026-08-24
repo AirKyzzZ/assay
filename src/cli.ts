@@ -3,6 +3,8 @@ import { parseArgs } from "node:util";
 import { scoreCallers } from "./callers.ts";
 import { fmt, runChecks } from "./checks.ts";
 import { fetchPairs, fetchSolPrice, summarise } from "./dexscreener.ts";
+import { trendingPools } from "./geckoterminal.ts";
+import { fetchRegime } from "./market.ts";
 import { append, dataPath, nextId, readAll } from "./store.ts";
 import { buildSummary } from "./stats.ts";
 import type { Chain, Entry, EntryKind } from "./types.ts";
@@ -22,6 +24,8 @@ ${BOLD}tradelog${RESET} — pre-trade checks, journal and edge analysis
   ${BOLD}review${RESET}                        forward return on everything, including passes
   ${BOLD}stats${RESET}                         edge summary vs holding SOL
   ${BOLD}callers${RESET}                       hit rate by source
+  ${BOLD}market${RESET}                        regime: fear/greed, BTC & SOL trend, DEX volume
+  ${BOLD}scan${RESET} [chain]                  trending pools, unvetted
 
   chains: solana | base
 
@@ -50,9 +54,86 @@ async function main(): Promise<void> {
       return cmdStats();
     case "callers":
       return cmdCallers();
+    case "market":
+      return cmdMarket();
+    case "scan":
+      return cmdScan(rest);
     default:
       console.log(USAGE);
   }
+}
+
+async function cmdMarket(): Promise<void> {
+  const r = await fetchRegime();
+  const sign = (n: number) => (n > 0 ? "+" : "");
+  const color = (n: number) => (n > 0 ? GREEN : n < 0 ? RED : DIM);
+
+  const stance =
+    r.stance === "risk-on"
+      ? `${GREEN}RISK-ON${RESET}`
+      : r.stance === "risk-off"
+        ? `${RED}RISK-OFF${RESET}`
+        : `${YELLOW}NEUTRAL${RESET}`;
+
+  console.log(`\n${BOLD}Regime${RESET}  ${stance}\n`);
+
+  if (r.fearGreed !== null) {
+    console.log(`  fear & greed   ${r.fearGreed} ${DIM}${r.fearGreedLabel ?? ""}${RESET}`);
+  }
+
+  for (const t of [r.btcTrend, r.solTrend]) {
+    if (!t) continue;
+    console.log(
+      `  ${t.symbol.padEnd(14)} $${t.price.toLocaleString("en-US", { maximumFractionDigits: 2 })}` +
+        `  ${color(t.change7d)}${sign(t.change7d)}${t.change7d.toFixed(1)}% 7d${RESET}` +
+        `  ${color(t.change30d)}${sign(t.change30d)}${t.change30d.toFixed(1)}% 30d${RESET}` +
+        `  ${t.above50d ? `${GREEN}above 50d${RESET}` : `${RED}below 50d${RESET}`}`
+    );
+  }
+
+  if (r.solanaDexVolume24h !== null) {
+    console.log(`  solana dex     $${fmt(r.solanaDexVolume24h)} 24h volume`);
+  }
+
+  if (r.stance === "risk-off") {
+    console.log(
+      `\n  ${YELLOW}Memecoins are pure beta to this. Risk-off is when the book bleeds fastest.${RESET}`
+    );
+  }
+  console.log();
+}
+
+async function cmdScan(args: string[]): Promise<void> {
+  const chain = args[0] ?? "solana";
+  if (!isChain(chain)) {
+    console.error("usage: tradelog scan [solana|base]");
+    process.exitCode = 1;
+    return;
+  }
+
+  const pools = await trendingPools(chain);
+  if (pools.length === 0) {
+    console.log("No trending pools returned.");
+    return;
+  }
+
+  console.log(`\n${BOLD}Trending on ${chain}${RESET} ${DIM}(unvetted — run check before acting)${RESET}\n`);
+  console.log(
+    `  ${DIM}${"pair".padEnd(24)}${"24h".padStart(9)}${"volume".padStart(12)}${"liquidity".padStart(12)}${RESET}`
+  );
+
+  for (const p of pools.slice(0, 15)) {
+    const c = p.priceChange24h > 0 ? GREEN : RED;
+    console.log(
+      `  ${p.name.slice(0, 23).padEnd(24)}` +
+        `${c}${`${p.priceChange24h > 0 ? "+" : ""}${p.priceChange24h.toFixed(0)}%`.padStart(9)}${RESET}` +
+        `${`$${fmt(p.volume24h)}`.padStart(12)}${`$${fmt(p.liquidity)}`.padStart(12)}`
+    );
+  }
+
+  console.log(
+    `\n  ${DIM}Trending means already discovered. Treat this as a watchlist, not a signal.${RESET}\n`
+  );
 }
 
 async function cmdCheck(args: string[]): Promise<void> {
