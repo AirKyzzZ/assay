@@ -1,0 +1,25 @@
+{
+  "name": "tradelog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pre-trade safety checks, trade journal and edge analysis for manual memecoin trading",
+  "bin": {
+    "tradelog": "./src/cli.ts"
+  },
+  "scripts": {
+    "check": "node src/cli.ts check",
+    "log": "node src/cli.ts log",
+    "review": "node src/cli.ts review",
+    "stats": "node src/cli.ts stats",
+    "callers": "node src/cli.ts callers",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=23"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.10.0"
+  }
+}
