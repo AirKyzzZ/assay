@@ -15,6 +15,22 @@ grounds, `#E7E3DD` on dark. Never recoloured, never on a busy image, never rotat
 | `favicon.svg` | 64×64, rounded container |
 | `source/` | Original artwork as drawn. `transparent-*.svg` are the clean ones. |
 | `png/` | Rasterised exports at platform sizes |
+| `font/` | Nunito Black, vendored under the OFL for reproducible builds |
+| `build.py` | Regenerates every asset above |
+
+## Rebuilding
+
+```sh
+python3 brand/build.py
+```
+
+Regenerates all SVGs and PNGs from `source/` and `font/`. Needs `fonttools`; PNG export
+additionally needs `rsvg-convert`. Change a colour or a size in `build.py` rather than
+editing an SVG by hand — hand edits get overwritten on the next build.
+
+Every asset carries baked padding so it never reads as cropped when dropped into a README
+or a profile header. Lockups use 34px at a 72px mark height; the mark file uses 14% of its
+own height on each side.
 
 The wordmark in `lockup-*.svg` and `banner.svg` is **converted to outlines** — no font
 required, nothing to fall back. Nunito is OFL-licensed, so embedding the outlines is fine.
