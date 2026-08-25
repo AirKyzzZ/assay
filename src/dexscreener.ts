@@ -49,6 +49,7 @@ export type TokenSnapshot = {
   mcapUsd: number | null;
   liqUsd: number | null;
   vol24hUsd: number | null;
+  change24h: number | null;
   pairAgeHours: number | null;
   pairCount: number;
 };
@@ -73,6 +74,7 @@ export function summarise(pairs: Pair[]): TokenSnapshot | null {
     mcapUsd: deepest.marketCap ?? deepest.fdv ?? null,
     liqUsd: liqUsd > 0 ? liqUsd : null,
     vol24hUsd: vol24hUsd > 0 ? vol24hUsd : null,
+    change24h: deepest.priceChange?.h24 ?? null,
     pairAgeHours: oldest === null ? null : (Date.now() - oldest) / 3_600_000,
     pairCount: pairs.length,
   };

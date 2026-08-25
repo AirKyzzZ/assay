@@ -5,6 +5,9 @@ import { fmt, runChecks } from "./checks.ts";
 import { fetchPairs, fetchSolPrice, summarise } from "./dexscreener.ts";
 import { trendingPools } from "./geckoterminal.ts";
 import { fetchRegime } from "./market.ts";
+import { holdingsPath, readHoldings, setHolding } from "./holdings.ts";
+import { describe, ladderState, parseLadder } from "./ladder.ts";
+import { assetKey, parseAsset, quoteAll, type AssetRef } from "./prices.ts";
 import { append, dataPath, nextId, readAll } from "./store.ts";
 import { buildSummary } from "./stats.ts";
 import type { Chain, Entry, EntryKind } from "./types.ts";
@@ -26,6 +29,8 @@ ${BOLD}assay${RESET} — pre-trade checks, journal and edge analysis
   ${BOLD}callers${RESET}                       hit rate by source
   ${BOLD}market${RESET}                        regime: fear/greed, BTC & SOL trend, DEX volume
   ${BOLD}scan${RESET} [chain]                  trending pools, unvetted
+  ${BOLD}hold${RESET} <asset> <amount>          record what you own (BTC, or solana:<addr>)
+  ${BOLD}watch${RESET}                         daily screen: what needs action right now
 
   chains: solana | base
 
@@ -58,6 +63,10 @@ async function main(): Promise<void> {
       return cmdMarket();
     case "scan":
       return cmdScan(rest);
+    case "hold":
+      return cmdHold(rest);
+    case "watch":
+      return cmdWatch();
     default:
       console.log(USAGE);
   }
@@ -352,6 +361,139 @@ async function cmdCallers(): Promise<void> {
   console.log(
     `\n  ${DIM}Under ~20 calls this is noise. Keep logging before you act on it.${RESET}\n`
   );
+}
+
+
+async function cmdHold(args: string[]): Promise<void> {
+  const [asset, amountRaw] = args;
+  const venue = args[2] ?? "ledger";
+
+  if (!asset || amountRaw === undefined) {
+    const holdings = await readHoldings();
+    if (holdings.length === 0) {
+      console.log("Nothing held yet. usage: assay hold <BTC|solana:ADDR> <amount> [venue]");
+      return;
+    }
+    console.log(`\n${BOLD}Holdings${RESET} ${DIM}${holdingsPath()}${RESET}\n`);
+    for (const h of holdings) {
+      console.log(`  ${h.asset.padEnd(24)}${String(h.amount).padStart(16)}  ${DIM}${h.venue}${RESET}`);
+    }
+    console.log();
+    return;
+  }
+
+  const amount = Number(amountRaw);
+  if (!Number.isFinite(amount)) {
+    console.error("amount must be a number");
+    process.exitCode = 1;
+    return;
+  }
+  if (!parseAsset(asset)) {
+    console.error(`Cannot parse "${asset}". Use a ticker like BTC, or solana:<address>.`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const saved = await setHolding(asset, amount, venue);
+  console.log(saved ? `${GREEN}held${RESET} ${saved.asset} ${saved.amount} ${DIM}${venue}${RESET}`
+                    : `${YELLOW}removed${RESET} ${asset}`);
+}
+
+async function cmdWatch(): Promise<void> {
+  const [entries, holdings] = await Promise.all([readAll(), readHoldings()]);
+  const buys = entries.filter((e) => e.kind === "buy");
+  const sells = entries.filter((e) => e.kind === "sell");
+
+  const refs: AssetRef[] = holdings.map((h) => h.ref);
+  for (const b of buys) refs.push({ kind: "token", chain: b.chain, address: b.address });
+  if (refs.length === 0) {
+    console.log("Nothing to watch. Add holdings with `assay hold`, or log a buy.");
+    return;
+  }
+
+  const quotes = await quoteAll(refs);
+  const actions: string[] = [];
+
+  if (holdings.length > 0) {
+    const rows = holdings.map((h) => {
+      const q = quotes.get(assetKey(h.ref));
+      const value = q?.priceUsd == null ? null : q.priceUsd * h.amount;
+      return { h, q, value };
+    });
+    const total = rows.reduce((s, r) => s + (r.value ?? 0), 0);
+
+    console.log(`\n${BOLD}Portfolio${RESET}   ${BOLD}$${total.toFixed(2)}${RESET}\n`);
+    for (const { h, q, value } of rows.sort((a, b) => (b.value ?? 0) - (a.value ?? 0))) {
+      const pct = total > 0 && value !== null ? (value / total) * 100 : 0;
+      const ch = q?.change24h ?? null;
+      const chCol = ch === null ? DIM : ch >= 0 ? GREEN : RED;
+      const chTxt = ch === null ? "—" : `${ch >= 0 ? "+" : ""}${ch.toFixed(1)}%`;
+      console.log(
+        `  ${h.asset.slice(0, 16).padEnd(17)}${String(h.amount).padStart(14)}` +
+          `${(value === null ? "—" : `$${value.toFixed(2)}`).padStart(12)}` +
+          `${`${pct.toFixed(1)}%`.padStart(8)}  ${chCol}${chTxt.padStart(7)}${RESET}`
+      );
+    }
+  }
+
+  const open: string[] = [];
+  for (const buy of buys) {
+    const q = quotes.get(`${buy.chain}:${buy.address}`);
+    if (q?.priceUsd == null || buy.priceUsd <= 0) continue;
+
+    const multiple = q.priceUsd / buy.priceUsd;
+    const size = buy.sizeUsd ?? 0;
+    const linked = sells.filter((s) => s.linkedTo === buy.id);
+    const soldPercent = size > 0
+      ? Math.min(100, linked.reduce((sum, s) => sum + (s.sizeUsd ?? 0), 0) / size * 100)
+      : 0;
+    if (soldPercent >= 99) continue;
+
+    const hours = (Date.now() - new Date(buy.ts).getTime()) / 3_600_000;
+    const ladder = parseLadder(buy.exitPlan);
+    const mCol = multiple >= 1 ? GREEN : RED;
+
+    let note = `${DIM}no ladder recorded${RESET}`;
+    if (ladder) {
+      const st = ladderState(ladder, multiple, soldPercent);
+      if (st.dueNow.length > 0) {
+        const pct = st.dueNow.reduce((s, r) => s + r.sellPercent, 0);
+        note = `${RED}SELL ${pct}%${RESET} ${DIM}— past ${st.dueNow.map((r) => `${r.atMultiple}x`).join(", ")}${RESET}`;
+        actions.push(`${buy.symbol} is at ${multiple.toFixed(2)}x — your ladder says sell ${pct}% now.`);
+      } else if (st.next) {
+        note = `${DIM}next: ${st.next.sellPercent}% at ${st.next.atMultiple}x${RESET}`;
+      } else {
+        note = `${DIM}ladder cleared, trailing${RESET}`;
+      }
+    }
+
+    if (hours > 72) {
+      actions.push(`${buy.symbol} held ${hours.toFixed(0)}h — 72h time stop. Exit regardless of price.`);
+    } else if (hours > 24 && Math.abs(multiple - 1) < 0.1) {
+      actions.push(`${buy.symbol} flat at ${multiple.toFixed(2)}x after ${hours.toFixed(0)}h — 24h time stop.`);
+    }
+
+    open.push(
+      `  ${buy.id}  ${buy.symbol.slice(0, 11).padEnd(12)}${mCol}${`${multiple.toFixed(2)}x`.padStart(7)}${RESET}` +
+        `${`$${(size * multiple).toFixed(0)}`.padStart(8)}${`${hours.toFixed(0)}h`.padStart(6)}` +
+        `${soldPercent > 0 ? `  ${DIM}${soldPercent.toFixed(0)}% out${RESET}` : "        "}  ${note}`
+    );
+  }
+
+  if (open.length > 0) {
+    console.log(`\n${BOLD}Open positions${RESET}\n`);
+    console.log(`  ${DIM}${"id".padEnd(6)}${"token".padEnd(12)}${"mult".padStart(7)}${"value".padStart(8)}${"held".padStart(6)}${RESET}`);
+    for (const line of open) console.log(line);
+  }
+
+  console.log();
+  if (actions.length === 0) {
+    console.log(`  ${GREEN}Nothing needs action.${RESET} ${DIM}Close the terminal.${RESET}\n`);
+  } else {
+    console.log(`  ${BOLD}${RED}Action needed${RESET}\n`);
+    for (const a of actions) console.log(`  ${RED}·${RESET} ${a}`);
+    console.log();
+  }
 }
 
 function isChain(value: unknown): value is Chain {

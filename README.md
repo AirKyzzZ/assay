@@ -21,7 +21,37 @@ assay stats                           edge summary vs holding SOL
 assay callers                         hit rate by source
 assay market                          regime: fear/greed, BTC & SOL trend, DEX volume
 assay scan [chain]                    trending pools, unvetted
+assay hold <asset> <amount>           record what you own (BTC, or solana:<addr>)
+assay watch                           daily screen: what needs action right now
 ```
+
+## Watch
+
+The one command worth running every day. It reads your holdings and every open position,
+prices them, and tells you what needs a decision.
+
+```
+Portfolio   $1551.60
+
+  BTC        0.0121795   $973.34   62.7%   +3.2%
+  ETH         0.191233   $476.17   30.7%   +1.1%
+  SOL         0.648167    $65.11    4.2%   +6.0%
+
+Open positions
+
+  0001  CYBERLEEK    2.40x   $120   30h   SELL 25% — past 2x
+
+  Action needed
+
+  · CYBERLEEK is at 2.40x — your ladder says sell 25% now.
+```
+
+The `--exit` ladder you wrote at entry is parsed and checked against live price. Partial
+sells are accounted for, so a position at 3.6x with 25% already out is told to sell 25%,
+not 50%. Time stops fire too: flat after 24h, or held past 72h regardless of price.
+
+When nothing needs a decision it says so and you close the terminal. That is the point —
+the tool exists to stop you staring at charts looking for a reason to act.
 
 ## Checks
 
@@ -93,6 +123,7 @@ Every source is free and keyless. No account, no billing, nothing to leak.
 |---|---|
 | `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` |
 | `ASSAY_FILE` | `./data/entries.jsonl` |
+| `ASSAY_HOLDINGS` | `./data/holdings.json` |
 
 The public Solana RPC rate-limits `getTokenLargestAccounts`. Point `SOLANA_RPC_URL` at a
 Helius free-tier endpoint if holder concentration keeps coming back unavailable.
