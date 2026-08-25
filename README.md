@@ -1,34 +1,57 @@
+<div align="center">
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="brand/png/lockup-dark@2x.png">
-  <img alt="Assay" src="brand/png/lockup-light@2x.png" width="290">
+  <img alt="Assay" src="brand/png/lockup-light@2x.png" width="320">
 </picture>
 
-Pre-trade safety checks, a trade journal, and edge analysis for manual memecoin trading.
+### Instrumented crypto trading. Code, checks, and numbers — losses included.
 
-Execution happens wherever you actually trade. Assay does the parts a trading app won't:
-verifying a token before you enter, keeping a consistent record of every decision including
-the ones you passed on, and telling you honestly whether any of it beat holding SOL.
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](tsconfig.json)
+[![Node](https://img.shields.io/badge/Node-23%2B-5FA04E?style=flat-square&logo=node.js&logoColor=white)](package.json)
+[![Runtime deps](https://img.shields.io/badge/runtime%20deps-0-B8873F?style=flat-square)](package.json)
+[![API keys](https://img.shields.io/badge/API%20keys-none-B8873F?style=flat-square)](#data-sources)
+[![Build step](https://img.shields.io/badge/build%20step-none-7A7570?style=flat-square)](#install)
 
-No API keys, no build step, no runtime dependencies. Node 23+ runs the TypeScript directly.
+</div>
+
+---
+
+Assay verifies a token before you buy it, remembers the exit plan you wrote while you were
+calm, and tells you honestly whether any of it beat holding SOL.
+
+It does not place trades. Execution happens wherever you already trade — this handles the
+parts a trading app has no incentive to build: **pre-trade verification, an honest record,
+and a benchmark you cannot argue with.**
+
+Six free data sources, no API keys, no build step, no runtime dependencies. Node 23+ runs
+the TypeScript directly.
+
+## Install
+
+```sh
+git clone https://github.com/AirKyzzZ/assay.git && cd assay
+npm install
+node src/cli.ts watch
+```
 
 ## Commands
 
-```
-assay check <solana|base> <address>   run the safety checks
-assay log <buy|sell|pass> [flags]     record an entry
-assay review                          forward return on everything, passes included
-assay stats                           edge summary vs holding SOL
-assay callers                         hit rate by source
-assay market                          regime: fear/greed, BTC & SOL trend, DEX volume
-assay scan [chain]                    trending pools, unvetted
-assay hold <asset> <amount>           record what you own (BTC, or solana:<addr>)
-assay watch                           daily screen: what needs action right now
-```
+| Command | Does |
+|---|---|
+| `assay watch` | Daily screen — portfolio, open positions, what needs a decision |
+| `assay check <chain> <address>` | Ten safety checks before you enter |
+| `assay hold <asset> <amount>` | Record what you own — `BTC`, or `solana:<address>` |
+| `assay log <buy\|sell\|pass>` | Journal an entry, including the ones you passed on |
+| `assay review` | Forward return on everything, passes included |
+| `assay stats` | Edge summary versus holding SOL |
+| `assay callers` | Hit rate by source — who is actually right |
+| `assay market` | Regime: fear & greed, BTC and SOL trend, DEX volume |
+| `assay scan [chain]` | Trending pools, unvetted |
 
 ## Watch
 
-The one command worth running every day. It reads your holdings and every open position,
-prices them, and tells you what needs a decision.
+The one command worth running daily.
 
 ```
 Portfolio   $1551.60
@@ -36,10 +59,12 @@ Portfolio   $1551.60
   BTC        0.0121795   $973.34   62.7%   +3.2%
   ETH         0.191233   $476.17   30.7%   +1.1%
   SOL         0.648167    $65.11    4.2%   +6.0%
+  ATOM         23.0268    $35.48    2.3%   -2.3%
 
 Open positions
 
-  0001  CYBERLEEK    2.40x   $120   30h   SELL 25% — past 2x
+  id    token         mult   value  held
+  0001  CYBERLEEK    2.40x    $120    30h   SELL 25% — past 2x
 
   Action needed
 
@@ -50,46 +75,50 @@ The `--exit` ladder you wrote at entry is parsed and checked against live price.
 sells are accounted for, so a position at 3.6x with 25% already out is told to sell 25%,
 not 50%. Time stops fire too: flat after 24h, or held past 72h regardless of price.
 
-When nothing needs a decision it says so and you close the terminal. That is the point —
-the tool exists to stop you staring at charts looking for a reason to act.
+**When nothing needs a decision it says so.** That is the point — the tool exists to stop
+you staring at charts looking for a reason to act.
 
-## Checks
+## Check
 
-Automated where free public data allows. The rest print what to verify and where, because a
-check that silently reports "unknown" as "fine" is worse than no check at all.
+```
+$ assay check solana ApZuxdpzMrbEYTGEzeY9afh5pj9d6qPRJCTgQYiipbKg
+
+CYBERLEEK  $20.88M mcap · $2.71M liq · age 205h
+
+  PASS    Liquidity            $2.71M across 30 pairs, floor $20.0k
+  PASS    Volume / mcap        191% of mcap traded in 24h
+  PASS    Mint authority       Revoked.
+  PASS    Freeze authority     Revoked.
+  PASS    Volume trend (6h)    -4% versus prior 6h. Still trading.
+  PASS    Drawdown from high   -20% off the 168h high, set 21h ago.
+  MANUAL  Holder concentration Public RPC rate-limited. Set SOLANA_RPC_URL.
+  MANUAL  Sellability          Buy the minimum, sell it immediately.
+  MANUAL  Deployer history     Trace the deployer — serial launchers repeat.
+```
 
 | Check | Automated | Source |
 |---|---|---|
-| Liquidity floor ($20k, all pairs) | yes | DexScreener |
-| 24h volume / market cap (30%) | yes | DexScreener |
-| Volume trend, 6h vs prior 6h | yes | GeckoTerminal OHLCV |
-| Drawdown from 168h high | yes | GeckoTerminal OHLCV |
-| Mint authority revoked | Solana only | RPC `getAccountInfo` |
-| Freeze authority revoked | Solana only | RPC `getAccountInfo` |
-| Top 10 holder concentration (40%) | Solana only | RPC `getTokenLargestAccounts` |
+| Liquidity floor, summed across every pair | ✅ | DexScreener |
+| 24h volume / market cap | ✅ | DexScreener |
+| Volume trend, 6h versus prior 6h | ✅ | GeckoTerminal |
+| Drawdown from 168h high | ✅ | GeckoTerminal |
+| Mint authority revoked | Solana | RPC |
+| Freeze authority revoked | Solana | RPC |
+| Top 10 holder concentration | Solana | RPC |
 | Contract powers | manual | verified source |
 | Sellability | manual | test sell |
 | Deployer history | manual | explorer |
 
-Holder concentration includes LP and exchange accounts. Subtract the pool before judging it.
+A check that silently reports *unknown* as *fine* is worse than no check, so anything it
+cannot verify says `MANUAL` and names what to look at.
+
+> Holder concentration counts LP and exchange accounts. Subtract the pool before judging it.
 
 ## Journal
 
 **A buy without `--exit` is refused.** The ladder gets written before the entry, not after.
 
-Every entry stores the SOL price at that moment, so the benchmark is computed from what you
-would actually have had rather than reconstructed later.
-
-`review` prices your passes too. The tokens you declined that then ran are the most
-informative data you generate, and nobody keeps them.
-
-## Usage
-
 ```sh
-npm install
-
-assay check solana <address>
-
 assay log buy \
   --chain solana --address <address> --source @handle --size 50 \
   --thesis "narrative rotation, third cat token this week" \
@@ -98,11 +127,13 @@ assay log buy \
 assay log pass \
   --chain base --address <address> --source @handle \
   --reason "top 10 hold 61%"
-
-assay review && assay stats && assay callers
 ```
 
-`data/` is gitignored. Your journal is yours.
+Every entry stores the SOL price at that moment, so the benchmark is computed from what you
+would actually have had rather than reconstructed later.
+
+`review` prices your passes too. **The tokens you declined that then ran are the most
+informative data you generate**, and nobody keeps them.
 
 ## Data sources
 
@@ -110,12 +141,12 @@ Every source is free and keyless. No account, no billing, nothing to leak.
 
 | Source | Gives | Limit |
 |---|---|---|
-| DexScreener | price, liquidity, volume, pair age across all pairs | 60/min |
-| GeckoTerminal | hourly OHLCV, trending pools | 10/min, throttled in client |
+| [DexScreener](https://docs.dexscreener.com/api/reference) | price, liquidity, volume, pair age across all pairs | 60/min |
+| [GeckoTerminal](https://www.geckoterminal.com/dex-api) | hourly OHLCV, trending pools | 10/min, throttled in client |
 | Solana RPC | mint authority, freeze authority, holder concentration | public node rate-limits |
-| Binance | BTC and SOL daily candles for regime | generous |
+| Binance | majors pricing, BTC and SOL daily candles | generous |
 | alternative.me | fear & greed index | none stated |
-| DefiLlama | Solana DEX volume | none stated |
+| [DefiLlama](https://defillama.com/docs/api) | Solana DEX volume | none stated |
 
 ## Config
 
@@ -128,11 +159,27 @@ Every source is free and keyless. No account, no billing, nothing to leak.
 The public Solana RPC rate-limits `getTokenLargestAccounts`. Point `SOLANA_RPC_URL` at a
 Helius free-tier endpoint if holder concentration keeps coming back unavailable.
 
+`data/` is gitignored. Your journal and holdings never leave your machine.
+
+## Roadmap
+
+- [ ] Cost basis on holdings, so the portfolio shows real P&L
+- [ ] `check` for majors — trend, drawdown from ATH, position in range
+- [ ] More free sources: CoinPaprika, GeckoTerminal new-pools, on-chain balance import
+- [ ] Read-only portfolio import instead of manual `hold`
+- [ ] Wallet scoring — rank the ~6% of wallets profitable over 90 days
+
 ## Brand
 
 Assets and the graphics chart live in [`brand/`](brand/).
 
 ---
 
-Nothing here is financial advice, and nothing here is a call. Roughly 8 in 10 tokens in a
-book like this go to zero. Size accordingly.
+<div align="center">
+
+**Nothing here is financial advice, and nothing here is a call.**
+
+Roughly 8 in 10 tokens in a book like this go to zero. Around 6% of Solana wallets finish
+90 days ahead, and 88% of those made under $100. Size accordingly.
+
+</div>
