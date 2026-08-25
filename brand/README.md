@@ -45,16 +45,25 @@ compete with brass.
 
 ## Type
 
+Two families. The display face matches the mark's roundness; the mono carries every number.
+
 | Face | Weight | Role |
 |---|---|---|
-| IBM Plex Mono | 500 | Wordmark, all data, verdicts, the CLI |
-| Spectral | 600 | Headings, editorial, long-form |
-| IBM Plex Sans | 400/500 | Body, interface, captions |
+| Nunito | 900 (Black) | Wordmark, headings, display |
+| Nunito | 400/600 | Body, interface, captions |
+| IBM Plex Mono | 400/500 | All data, verdicts, the CLI |
 
-Wordmark is uppercase `ASSAY` at +0.18em tracking, weight 500, never bold or italic.
-Numerals always `tabular-nums` — figures that don't align read as unmeasured.
+Nunito was chosen for its rounded stroke terminals, which echo the mark's round caps at a
+matching weight. Fredoka and Baloo read too playful; Outfit and Poppins have flat terminals,
+so they are geometric without being round.
 
-Never Inter, never Space Grotesk. They are what everything else in this category uses.
+Wordmark is uppercase `ASSAY`, weight 900, +1.6 tracking at 38px. Heavy rounded faces need
+far less tracking than monospace — do not letterspace it like a mono wordmark.
+
+Numerals always `tabular-nums` in Plex Mono. Figures that don't align read as unmeasured.
+
+Never Inter, never Space Grotesk. Both are free on Google Fonts:
+`Nunito:wght@400;600;900` and `IBM+Plex+Mono:wght@400;500`.
 
 ## Terminal
 
@@ -80,6 +89,6 @@ The CLI is the brand's most-used surface. Its palette is the brand palette.
 
 ## Before distributing
 
-`lockup-*.svg` and `banner.svg` set `ASSAY` as live text in IBM Plex Mono. Where the font
-is absent it falls back silently and the tracking breaks. Install IBM Plex Mono and convert
-text to paths before handing files to any platform.
+`lockup-*.svg` and `banner.svg` set `ASSAY` as live text in Nunito Black. Where the font is
+absent it falls back silently — usually to a serif — and the wordmark breaks completely.
+Install Nunito and convert text to paths before handing files to any platform.
