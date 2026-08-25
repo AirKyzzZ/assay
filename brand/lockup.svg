@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 72" width="300" height="72" fill="none" role="img" aria-label="Assay">
-  <g stroke="currentColor"><path d="M32 3 L59.5 18.75 L59.5 53.25 L32 69 L4.5 53.25 L4.5 18.75 Z" stroke-width="4" stroke-linejoin="miter"/><path d="M18 54 L32 18 L46 54" stroke-width="4.6" stroke-linejoin="miter" stroke-linecap="butt"/><path d="M23.4 40 H31.5" stroke-width="4.6" stroke-linecap="butt"/></g>
-  <text x="84" y="46.5" fill="currentColor" font-family="'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace" font-size="34" font-weight="500" letter-spacing="6.1">ASSAY</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 296 64" width="296" height="64" role="img" aria-label="Assay">
+  <path d="M32 5 L57 55 H7 Z M32 23 L45 47 H19 Z" fill="currentColor" fill-rule="evenodd"/>
+  <path d="M23.9 38 H40.1" stroke="#B8873F" stroke-width="4.5" stroke-linecap="butt"/>
+  <text x="80" y="43" fill="currentColor" font-family="'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace" font-size="32" font-weight="500" letter-spacing="5.8">ASSAY</text>
 </svg>
