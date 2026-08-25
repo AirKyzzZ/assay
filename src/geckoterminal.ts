@@ -10,11 +10,16 @@ async function throttled<T>(path: string): Promise<T | null> {
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   lastCall = Date.now();
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { accept: "application/json;version=20230302" },
-  });
-  if (!res.ok) return null;
-  return (await res.json()) as T;
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      headers: { accept: "application/json;version=20230302" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
 }
 
 export type Candle = {

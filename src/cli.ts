@@ -5,10 +5,18 @@ import { fmt, runChecks } from "./checks.ts";
 import { fetchPairs, fetchSolPrice, summarise } from "./dexscreener.ts";
 import { trendingPools } from "./geckoterminal.ts";
 import { fetchRegime } from "./market.ts";
-import { addToHolding, holdingsPath, readHoldings, setHolding } from "./holdings.ts";
+import { fetchBalances, isWalletChain, type WalletChain } from "./balances.ts";
+import {
+  addToHolding,
+  holdingsPath,
+  readHoldings,
+  setHolding,
+  syncWalletHoldings,
+} from "./holdings.ts";
 import { describe, ladderState, parseLadder } from "./ladder.ts";
 import { assetKey, parseAsset, quoteAll, type AssetRef } from "./prices.ts";
 import { append, dataPath, nextId, readAll } from "./store.ts";
+import { addWallet, readWallets, removeWallet, walletsPath } from "./wallets.ts";
 import { buildSummary } from "./stats.ts";
 import type { Chain, Entry, EntryKind } from "./types.ts";
 
@@ -33,6 +41,9 @@ ${BOLD}assay${RESET} — pre-trade checks, journal and edge analysis
     --cost N      total USD paid       --avg N    average USD per unit
     --add N       add to the position  --venue X  where it lives
   ${BOLD}watch${RESET}                         daily screen: what needs action right now
+  ${BOLD}wallet${RESET} add <chain> <address>   track a wallet, read-only
+  ${BOLD}wallet${RESET} list | remove | sync    manage and refresh balances
+    chains: bitcoin | ethereum | base | solana
 
   chains: solana | base
 
@@ -69,6 +80,8 @@ async function main(): Promise<void> {
       return cmdHold(rest);
     case "watch":
       return cmdWatch();
+    case "wallet":
+      return cmdWallet(rest);
     default:
       console.log(USAGE);
   }
@@ -390,7 +403,7 @@ async function cmdHold(args: string[]): Promise<void> {
     for (const h of holdings) {
       const basis = h.costUsd === null ? `${DIM}no cost basis${RESET}` : `$${h.costUsd.toFixed(2)}`;
       console.log(
-        `  ${h.asset.slice(0, 18).padEnd(19)}${String(h.amount).padStart(14)}` +
+        `  ${h.asset.slice(0, 18).padEnd(19)}${fmtAmount(h.amount).padStart(14)}` +
           `${basis.padStart(24)}  ${DIM}${h.venue}${RESET}`
       );
     }
@@ -487,7 +500,7 @@ async function cmdWatch(): Promise<void> {
     console.log(`${head}\n`);
 
     console.log(
-      `  ${DIM}${"asset".padEnd(13)}${"amount".padStart(13)}${"value".padStart(11)}` +
+      `  ${DIM}${"asset".padEnd(11)}${"where".padEnd(14)}${"amount".padStart(13)}${"value".padStart(11)}` +
         `${"alloc".padStart(8)}${"24h".padStart(8)}${"p&l".padStart(12)}${"".padStart(9)}${RESET}`
     );
 
@@ -506,8 +519,10 @@ async function cmdWatch(): Promise<void> {
           `${`${rowPct >= 0 ? "+" : ""}${rowPct.toFixed(1)}%`.padStart(9)}${RESET}`;
       }
 
+      const name = h.ref.kind === "major" ? h.asset : (q?.label ?? h.asset.slice(0, 10));
       console.log(
-        `  ${h.asset.slice(0, 12).padEnd(13)}${String(h.amount).padStart(13)}` +
+        `  ${name.slice(0, 10).padEnd(11)}${DIM}${h.venue.slice(0, 13).padEnd(14)}${RESET}` +
+          `${fmtAmount(h.amount).padStart(13)}` +
           `${(value === null ? "—" : `$${value.toFixed(2)}`).padStart(11)}` +
           `${`${alloc.toFixed(1)}%`.padStart(8)}${chCol}${chTxt.padStart(8)}${RESET}${pnlTxt}`
       );
@@ -572,6 +587,117 @@ async function cmdWatch(): Promise<void> {
     for (const a of actions) console.log(`  ${RED}·${RESET} ${a}`);
     console.log();
   }
+}
+
+
+const DUST_USD = 1;
+
+async function cmdWallet(args: string[]): Promise<void> {
+  const [action, ...rest] = args;
+
+  if (action === "add") {
+    const [chain, address] = rest;
+    const label = rest[2] ?? null;
+    if (!isWalletChain(chain) || !address) {
+      console.error("usage: assay wallet add <bitcoin|ethereum|base|solana> <address> [label]");
+      process.exitCode = 1;
+      return;
+    }
+    const w = await addWallet(chain, address, label);
+    console.log(
+      `${GREEN}watching${RESET} ${w.label} ${DIM}${w.chain} ${w.address}${RESET}\n` +
+        `  ${DIM}Read-only. Assay never asks for a key or seed phrase and cannot move funds.${RESET}`
+    );
+    return;
+  }
+
+  if (action === "remove") {
+    const needle = rest[0];
+    if (!needle) {
+      console.error("usage: assay wallet remove <address|label>");
+      process.exitCode = 1;
+      return;
+    }
+    const removed = await removeWallet(needle);
+    console.log(removed ? `${YELLOW}removed${RESET} ${removed.label}` : `No wallet matching "${needle}".`);
+    return;
+  }
+
+  if (action === "sync") {
+    const wallets = await readWallets();
+    if (wallets.length === 0) {
+      console.log("No wallets tracked. Add one with `assay wallet add <chain> <address>`.");
+      return;
+    }
+
+    console.log(`\n${BOLD}Syncing ${wallets.length} wallet(s)${RESET}\n`);
+
+    for (const w of wallets) {
+      const result = await fetchBalances(w.chain, w.address);
+      if (!result.ok) {
+        console.log(`  ${w.label.slice(0, 19).padEnd(20)} ${RED}${result.reason} — left unchanged${RESET}`);
+        continue;
+      }
+      const balances = result.balances;
+      if (balances.length === 0) {
+        await syncWalletHoldings(w.id, w.label, []);
+        console.log(`  ${w.label.slice(0, 19).padEnd(20)} ${DIM}empty${RESET}`);
+        continue;
+      }
+
+      const quotes = await quoteAll(
+        balances.flatMap((b) => {
+          const ref = parseAsset(b.asset);
+          return ref ? [ref] : [];
+        })
+      );
+
+      const valued = balances.flatMap((b) => {
+        const ref = parseAsset(b.asset);
+        if (!ref) return [];
+        const price = quotes.get(assetKey(ref))?.priceUsd ?? null;
+        const value = price === null ? null : price * b.amount;
+        return [{ ...b, value }];
+      });
+
+      const keep = valued.filter((b) => (b.value ?? 0) >= DUST_USD);
+      const dust = valued.length - keep.length;
+      const total = keep.reduce((sum, b) => sum + (b.value ?? 0), 0);
+
+      const { kept } = await syncWalletHoldings(
+        w.id,
+        w.label,
+        keep.map((b) => ({ asset: b.asset, amount: b.amount }))
+      );
+
+      console.log(
+        `  ${w.label.slice(0, 19).padEnd(20)} ${GREEN}${String(kept).padStart(3)} assets${RESET}` +
+          ` ${`$${total.toFixed(2)}`.padStart(12)}` +
+          (dust > 0 ? `  ${DIM}${dust} below $${DUST_USD} ignored${RESET}` : "")
+      );
+    }
+
+    console.log(`\n  ${DIM}Run \`assay watch\` to see the portfolio.${RESET}\n`);
+    return;
+  }
+
+  const wallets = await readWallets();
+  if (wallets.length === 0) {
+    console.log("No wallets tracked. usage: assay wallet add <chain> <address> [label]");
+    return;
+  }
+  console.log(`\n${BOLD}Wallets${RESET} ${DIM}${walletsPath()}${RESET}\n`);
+  for (const w of wallets) {
+    console.log(`  ${w.label.slice(0, 19).padEnd(20)}${w.chain.padEnd(10)}${DIM}${w.address}${RESET}`);
+  }
+  console.log();
+}
+
+function fmtAmount(n: number): string {
+  if (n === 0) return "0";
+  if (n >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (n >= 1) return n.toFixed(4).replace(/\.?0+$/, "");
+  return n.toPrecision(4).replace(/\.?0+$/, "");
 }
 
 function isChain(value: unknown): value is Chain {

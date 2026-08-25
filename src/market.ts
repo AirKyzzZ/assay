@@ -21,7 +21,7 @@ export type Trend = {
 
 async function json<T>(url: string): Promise<T | null> {
   try {
-    const res = await fetch(url, { headers: { accept: "application/json" } });
+    const res = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {

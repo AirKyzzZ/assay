@@ -1,6 +1,8 @@
 import type { Chain } from "./types.ts";
 
 const BASE_URL = "https://api.dexscreener.com";
+const TIMEOUT_MS = 10_000;
+const BATCH = 30;
 
 export type Pair = {
   chainId: string;
@@ -23,11 +25,16 @@ export const CHAIN_IDS: Record<Chain, string> = {
 };
 
 async function get<T>(path: string): Promise<T | null> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { accept: "application/json" },
-  });
-  if (!res.ok) return null;
-  return (await res.json()) as T;
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchPairs(chain: Chain, address: string): Promise<Pair[]> {
@@ -89,4 +96,34 @@ export async function fetchPrice(chain: Chain, address: string): Promise<number 
 
 export async function fetchSolPrice(): Promise<number | null> {
   return fetchPrice("solana", "So11111111111111111111111111111111111111112");
+}
+
+export async function fetchTokensBatch(
+  chain: Chain,
+  addresses: string[]
+): Promise<Map<string, TokenSnapshot>> {
+  const out = new Map<string, TokenSnapshot>();
+  const unique = [...new Set(addresses)];
+
+  for (let i = 0; i < unique.length; i += BATCH) {
+    const slice = unique.slice(i, i + BATCH);
+    const pairs = await get<Pair[]>(`/tokens/v1/${CHAIN_IDS[chain]}/${slice.join(",")}`);
+    if (!Array.isArray(pairs)) continue;
+
+    const byToken = new Map<string, Pair[]>();
+    for (const pair of pairs) {
+      const key = pair.baseToken?.address;
+      if (!key) continue;
+      const list = byToken.get(key) ?? [];
+      list.push(pair);
+      byToken.set(key, list);
+    }
+
+    for (const [address, list] of byToken) {
+      const snap = summarise(list);
+      if (snap) out.set(address, snap);
+    }
+  }
+
+  return out;
 }

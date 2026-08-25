@@ -10,13 +10,14 @@ export type Holding = {
   amount: number;
   costUsd: number | null;
   venue: string;
+  source: string;
   updatedAt: string;
 };
 
 export async function readHoldings(): Promise<Holding[]> {
   try {
     const parsed = JSON.parse(await readFile(FILE, "utf8")) as Holding[];
-    return parsed.map((h) => ({ ...h, costUsd: h.costUsd ?? null }));
+    return parsed.map((h) => ({ ...h, costUsd: h.costUsd ?? null, source: h.source ?? "manual" }));
   } catch {
     return [];
   }
@@ -54,6 +55,7 @@ export async function setHolding(input: HoldInput): Promise<Holding | null> {
     amount: input.amount,
     costUsd: input.costUsd,
     venue: input.venue ?? holdings[idx]?.venue ?? "ledger",
+    source: holdings[idx]?.source ?? "manual",
     updatedAt: new Date().toISOString(),
   };
 
@@ -89,6 +91,43 @@ export async function addToHolding(input: HoldInput): Promise<Holding | null> {
 
   await write(holdings);
   return existing;
+}
+
+export type SyncedBalance = { asset: string; amount: number };
+
+export async function syncWalletHoldings(
+  walletId: string,
+  label: string,
+  balances: SyncedBalance[]
+): Promise<{ kept: number; dropped: number }> {
+  const holdings = await readHoldings();
+
+  const priorCost = new Map<string, number>();
+  for (const h of holdings) {
+    if (h.source === walletId && h.costUsd !== null) priorCost.set(assetKey(h.ref), h.costUsd);
+  }
+
+  const dropped = holdings.filter((h) => h.source === walletId).length;
+  const remaining = holdings.filter((h) => h.source !== walletId);
+
+  let kept = 0;
+  for (const b of balances) {
+    const ref = parseAsset(b.asset);
+    if (!ref) continue;
+    remaining.push({
+      asset: ref.kind === "major" ? ref.ticker : b.asset,
+      ref,
+      amount: b.amount,
+      costUsd: priorCost.get(assetKey(ref)) ?? null,
+      venue: label,
+      source: walletId,
+      updatedAt: new Date().toISOString(),
+    });
+    kept += 1;
+  }
+
+  await write(remaining);
+  return { kept, dropped };
 }
 
 export function holdingsPath(): string {

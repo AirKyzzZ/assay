@@ -42,13 +42,47 @@ node src/cli.ts watch
 |---|---|
 | `assay watch` | Daily screen — portfolio, open positions, what needs a decision |
 | `assay check <chain> <address>` | Ten safety checks before you enter |
-| `assay hold <asset> <amount>` | Record what you own, with cost basis |
+| `assay wallet add <chain> <address>` | Track a wallet read-only — BTC, ETH, Base, Solana |
+| `assay wallet sync` | Refresh every tracked wallet's balances |
+| `assay hold <asset> <amount>` | Record what you own manually, with cost basis |
 | `assay log <buy\|sell\|pass>` | Journal an entry, including the ones you passed on |
 | `assay review` | Forward return on everything, passes included |
 | `assay stats` | Edge summary versus holding SOL |
 | `assay callers` | Hit rate by source — who is actually right |
 | `assay market` | Regime: fear & greed, BTC and SOL trend, DEX volume |
 | `assay scan [chain]` | Trending pools, unvetted |
+
+## Wallets
+
+Point Assay at any public address and it reads the balances. **Read-only — it never asks
+for a key or seed phrase and cannot move funds.**
+
+```sh
+assay wallet add bitcoin  bc1q...  cold
+assay wallet add ethereum 0x...    ledger-eth
+assay wallet add base     0x...    fomo-base
+assay wallet add solana   9Wz...   fomo-sol
+assay wallet sync
+```
+
+FOMO has no public API, but it is a custodial app — take the Solana and Base addresses it
+shows you and add them like any other wallet. Same result, nothing to reverse-engineer,
+no terms to violate.
+
+```
+Syncing 4 wallet(s)
+
+  cold                   1 assets    $973.34
+  ledger-eth             1 assets    $476.17
+  fomo-base              3 assets    $128.40   2 below $1 ignored
+  fomo-sol               solana RPC unreachable — left unchanged
+```
+
+Balances under $1 are ignored, because every real wallet accumulates spam tokens and
+without a floor your portfolio becomes a list of scams. A wallet that cannot be reached is
+**left unchanged rather than emptied** — a failed request must never look like a sold position.
+
+Synced holdings are replaced wholesale each sync, but any cost basis you entered is kept.
 
 ## Holdings
 
@@ -170,6 +204,7 @@ Every source is free and keyless. No account, no billing, nothing to leak.
 | `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` |
 | `ASSAY_FILE` | `./data/entries.jsonl` |
 | `ASSAY_HOLDINGS` | `./data/holdings.json` |
+| `ASSAY_WALLETS` | `./data/wallets.json` |
 
 The public Solana RPC rate-limits `getTokenLargestAccounts`. Point `SOLANA_RPC_URL` at a
 Helius free-tier endpoint if holder concentration keeps coming back unavailable.
@@ -180,8 +215,9 @@ Helius free-tier endpoint if holder concentration keeps coming back unavailable.
 
 - [x] Cost basis on holdings, so the portfolio shows real P&L
 - [ ] `check` for majors — trend, drawdown from ATH, position in range
-- [ ] More free sources: CoinPaprika, GeckoTerminal new-pools, on-chain balance import
-- [ ] Read-only portfolio import instead of manual `hold`
+- [ ] Buy/sell history from on-chain transactions, not just balances
+- [ ] More free sources: CoinPaprika for alts Binance does not list
+- [x] Read-only portfolio import instead of manual `hold`
 - [ ] Wallet scoring — rank the ~6% of wallets profitable over 90 days
 
 ## Brand

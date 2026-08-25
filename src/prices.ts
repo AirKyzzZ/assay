@@ -1,4 +1,4 @@
-import { fetchPairs, summarise } from "./dexscreener.ts";
+import { fetchPairs, fetchTokensBatch, summarise } from "./dexscreener.ts";
 import type { Chain } from "./types.ts";
 
 const BINANCE = "https://api.binance.com/api/v3";
@@ -73,6 +73,31 @@ export async function quoteAll(refs: AssetRef[]): Promise<Map<string, Quote>> {
   const unique = new Map<string, AssetRef>();
   for (const ref of refs) unique.set(assetKey(ref), ref);
 
-  const results = await Promise.all([...unique.values()].map(quote));
-  return new Map(results.map((q) => [assetKey(q.ref), q]));
+  const out = new Map<string, Quote>();
+  const byChain = new Map<Chain, string[]>();
+  const majors: AssetRef[] = [];
+
+  for (const ref of unique.values()) {
+    if (ref.kind === "major") majors.push(ref);
+    else byChain.set(ref.chain, [...(byChain.get(ref.chain) ?? []), ref.address]);
+  }
+
+  const majorQuotes = await Promise.all(majors.map(quote));
+  for (const q of majorQuotes) out.set(assetKey(q.ref), q);
+
+  for (const [chain, addresses] of byChain) {
+    const snaps = await fetchTokensBatch(chain, addresses);
+    for (const address of addresses) {
+      const ref: AssetRef = { kind: "token", chain, address };
+      const snap = snaps.get(address);
+      out.set(assetKey(ref), {
+        ref,
+        label: snap?.symbol ?? address.slice(0, 6),
+        priceUsd: snap?.priceUsd ?? null,
+        change24h: snap?.change24h ?? null,
+      });
+    }
+  }
+
+  return out;
 }
