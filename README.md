@@ -42,7 +42,7 @@ node src/cli.ts watch
 |---|---|
 | `assay watch` | Daily screen — portfolio, open positions, what needs a decision |
 | `assay check <chain> <address>` | Ten safety checks before you enter |
-| `assay hold <asset> <amount>` | Record what you own — `BTC`, or `solana:<address>` |
+| `assay hold <asset> <amount>` | Record what you own, with cost basis |
 | `assay log <buy\|sell\|pass>` | Journal an entry, including the ones you passed on |
 | `assay review` | Forward return on everything, passes included |
 | `assay stats` | Edge summary versus holding SOL |
@@ -50,17 +50,31 @@ node src/cli.ts watch
 | `assay market` | Regime: fear & greed, BTC and SOL trend, DEX volume |
 | `assay scan [chain]` | Trending pools, unvetted |
 
+## Holdings
+
+```sh
+assay hold BTC 0.0121795 --cost 1100      # total USD paid
+assay hold ETH 0.191233 --avg 2600        # or average per unit
+assay hold SOL --add 0.25 --cost 22       # DCA: weighted average recomputed
+assay hold solana:<address> 1200 --cost 60
+```
+
+Cost basis is optional. Holdings without it still show value and 24h change; they are just
+excluded from P&L, and the header says how many were left out so the total never quietly
+lies to you.
+
 ## Watch
 
 The one command worth running daily.
 
 ```
-Portfolio   $1551.60
+Portfolio   $1539.82   cost $1659.21   -$155.10 (-9.3%)  · 1 without basis
 
-  BTC        0.0121795   $973.34   62.7%   +3.2%
-  ETH         0.191233   $476.17   30.7%   +1.1%
-  SOL         0.648167    $65.11    4.2%   +6.0%
-  ATOM         23.0268    $35.48    2.3%   -2.3%
+  asset          amount      value   alloc     24h         p&l
+  BTC         0.0121795    $965.84   62.7%   +1.9%    -$134.16   -12.2%
+  ETH          0.191233    $473.72   30.8%   +0.1%     -$23.48    -4.7%
+  SOL          0.648167     $64.54    4.2%   +5.0%      +$2.54    +4.1%
+  ATOM          23.0268     $35.71    2.3%   -1.7%           —        —
 
 Open positions
 
@@ -164,7 +178,7 @@ Helius free-tier endpoint if holder concentration keeps coming back unavailable.
 
 ## Roadmap
 
-- [ ] Cost basis on holdings, so the portfolio shows real P&L
+- [x] Cost basis on holdings, so the portfolio shows real P&L
 - [ ] `check` for majors — trend, drawdown from ATH, position in range
 - [ ] More free sources: CoinPaprika, GeckoTerminal new-pools, on-chain balance import
 - [ ] Read-only portfolio import instead of manual `hold`

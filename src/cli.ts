@@ -5,7 +5,7 @@ import { fmt, runChecks } from "./checks.ts";
 import { fetchPairs, fetchSolPrice, summarise } from "./dexscreener.ts";
 import { trendingPools } from "./geckoterminal.ts";
 import { fetchRegime } from "./market.ts";
-import { holdingsPath, readHoldings, setHolding } from "./holdings.ts";
+import { addToHolding, holdingsPath, readHoldings, setHolding } from "./holdings.ts";
 import { describe, ladderState, parseLadder } from "./ladder.ts";
 import { assetKey, parseAsset, quoteAll, type AssetRef } from "./prices.ts";
 import { append, dataPath, nextId, readAll } from "./store.ts";
@@ -29,7 +29,9 @@ ${BOLD}assay${RESET} — pre-trade checks, journal and edge analysis
   ${BOLD}callers${RESET}                       hit rate by source
   ${BOLD}market${RESET}                        regime: fear/greed, BTC & SOL trend, DEX volume
   ${BOLD}scan${RESET} [chain]                  trending pools, unvetted
-  ${BOLD}hold${RESET} <asset> <amount>          record what you own (BTC, or solana:<addr>)
+  ${BOLD}hold${RESET} <asset> [amount]          record what you own (BTC, or solana:<addr>)
+    --cost N      total USD paid       --avg N    average USD per unit
+    --add N       add to the position  --venue X  where it lives
   ${BOLD}watch${RESET}                         daily screen: what needs action right now
 
   chains: solana | base
@@ -365,38 +367,81 @@ async function cmdCallers(): Promise<void> {
 
 
 async function cmdHold(args: string[]): Promise<void> {
-  const [asset, amountRaw] = args;
-  const venue = args[2] ?? "ledger";
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      cost: { type: "string" },
+      avg: { type: "string" },
+      add: { type: "string" },
+      venue: { type: "string" },
+    },
+    allowPositionals: true,
+  });
 
-  if (!asset || amountRaw === undefined) {
+  const asset = positionals[0];
+
+  if (!asset) {
     const holdings = await readHoldings();
     if (holdings.length === 0) {
-      console.log("Nothing held yet. usage: assay hold <BTC|solana:ADDR> <amount> [venue]");
+      console.log("Nothing held yet. usage: assay hold <BTC|solana:ADDR> <amount> [--cost N]");
       return;
     }
     console.log(`\n${BOLD}Holdings${RESET} ${DIM}${holdingsPath()}${RESET}\n`);
     for (const h of holdings) {
-      console.log(`  ${h.asset.padEnd(24)}${String(h.amount).padStart(16)}  ${DIM}${h.venue}${RESET}`);
+      const basis = h.costUsd === null ? `${DIM}no cost basis${RESET}` : `$${h.costUsd.toFixed(2)}`;
+      console.log(
+        `  ${h.asset.slice(0, 18).padEnd(19)}${String(h.amount).padStart(14)}` +
+          `${basis.padStart(24)}  ${DIM}${h.venue}${RESET}`
+      );
     }
     console.log();
     return;
   }
 
-  const amount = Number(amountRaw);
-  if (!Number.isFinite(amount)) {
-    console.error("amount must be a number");
-    process.exitCode = 1;
-    return;
-  }
   if (!parseAsset(asset)) {
     console.error(`Cannot parse "${asset}". Use a ticker like BTC, or solana:<address>.`);
     process.exitCode = 1;
     return;
   }
 
-  const saved = await setHolding(asset, amount, venue);
-  console.log(saved ? `${GREEN}held${RESET} ${saved.asset} ${saved.amount} ${DIM}${venue}${RESET}`
-                    : `${YELLOW}removed${RESET} ${asset}`);
+  const adding = values.add !== undefined;
+  const amount = Number(adding ? values.add : positionals[1]);
+  if (!Number.isFinite(amount)) {
+    console.error(adding ? "--add needs a number" : "amount must be a number");
+    process.exitCode = 1;
+    return;
+  }
+
+  if (values.cost !== undefined && values.avg !== undefined) {
+    console.error("Use --cost (total paid) or --avg (per unit), not both.");
+    process.exitCode = 1;
+    return;
+  }
+
+  let costUsd: number | null = null;
+  if (values.cost !== undefined) costUsd = Number(values.cost);
+  else if (values.avg !== undefined) costUsd = Number(values.avg) * amount;
+  if (costUsd !== null && !Number.isFinite(costUsd)) {
+    console.error("cost must be a number");
+    process.exitCode = 1;
+    return;
+  }
+
+  const input = { asset, amount, costUsd, venue: values.venue ?? null };
+  const saved = adding ? await addToHolding(input) : await setHolding(input);
+
+  if (!saved) {
+    console.log(`${YELLOW}removed${RESET} ${asset}`);
+    return;
+  }
+
+  const avg = saved.costUsd === null ? null : saved.costUsd / saved.amount;
+  console.log(
+    `${GREEN}${adding ? "added" : "held"}${RESET} ${saved.asset} ${saved.amount}` +
+      (avg === null
+        ? `  ${DIM}no cost basis${RESET}`
+        : `  ${DIM}avg $${avg.toPrecision(6)} · basis $${saved.costUsd?.toFixed(2)}${RESET}`)
+  );
 }
 
 async function cmdWatch(): Promise<void> {
@@ -418,20 +463,53 @@ async function cmdWatch(): Promise<void> {
     const rows = holdings.map((h) => {
       const q = quotes.get(assetKey(h.ref));
       const value = q?.priceUsd == null ? null : q.priceUsd * h.amount;
-      return { h, q, value };
+      const pnl = value === null || h.costUsd === null ? null : value - h.costUsd;
+      return { h, q, value, pnl };
     });
-    const total = rows.reduce((s, r) => s + (r.value ?? 0), 0);
 
-    console.log(`\n${BOLD}Portfolio${RESET}   ${BOLD}$${total.toFixed(2)}${RESET}\n`);
-    for (const { h, q, value } of rows.sort((a, b) => (b.value ?? 0) - (a.value ?? 0))) {
-      const pct = total > 0 && value !== null ? (value / total) * 100 : 0;
+    const total = rows.reduce((sum, r) => sum + (r.value ?? 0), 0);
+    const priced = rows.filter((r) => r.pnl !== null);
+    const cost = priced.reduce((sum, r) => sum + (r.h.costUsd ?? 0), 0);
+    const pnl = priced.reduce((sum, r) => sum + (r.pnl ?? 0), 0);
+
+    let head = `\n${BOLD}Portfolio${RESET}   ${BOLD}$${total.toFixed(2)}${RESET}`;
+    if (priced.length > 0 && cost > 0) {
+      const pct = (pnl / cost) * 100;
+      const col = pnl >= 0 ? GREEN : RED;
+      head +=
+        `   ${DIM}cost $${cost.toFixed(2)}${RESET}   ` +
+        `${col}${pnl >= 0 ? "+" : "-"}$${Math.abs(pnl).toFixed(2)} ` +
+        `(${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%)${RESET}`;
+      if (priced.length < rows.length) {
+        head += `  ${DIM}· ${rows.length - priced.length} without basis${RESET}`;
+      }
+    }
+    console.log(`${head}\n`);
+
+    console.log(
+      `  ${DIM}${"asset".padEnd(13)}${"amount".padStart(13)}${"value".padStart(11)}` +
+        `${"alloc".padStart(8)}${"24h".padStart(8)}${"p&l".padStart(12)}${"".padStart(9)}${RESET}`
+    );
+
+    for (const { h, q, value, pnl: rowPnl } of rows.sort((a, b) => (b.value ?? 0) - (a.value ?? 0))) {
+      const alloc = total > 0 && value !== null ? (value / total) * 100 : 0;
       const ch = q?.change24h ?? null;
       const chCol = ch === null ? DIM : ch >= 0 ? GREEN : RED;
       const chTxt = ch === null ? "—" : `${ch >= 0 ? "+" : ""}${ch.toFixed(1)}%`;
+
+      let pnlTxt = `${DIM}${"—".padStart(12)}${"—".padStart(9)}${RESET}`;
+      if (rowPnl !== null && h.costUsd) {
+        const rowPct = (rowPnl / h.costUsd) * 100;
+        const col = rowPnl >= 0 ? GREEN : RED;
+        pnlTxt =
+          `${col}${`${rowPnl >= 0 ? "+" : "-"}$${Math.abs(rowPnl).toFixed(2)}`.padStart(12)}` +
+          `${`${rowPct >= 0 ? "+" : ""}${rowPct.toFixed(1)}%`.padStart(9)}${RESET}`;
+      }
+
       console.log(
-        `  ${h.asset.slice(0, 16).padEnd(17)}${String(h.amount).padStart(14)}` +
-          `${(value === null ? "—" : `$${value.toFixed(2)}`).padStart(12)}` +
-          `${`${pct.toFixed(1)}%`.padStart(8)}  ${chCol}${chTxt.padStart(7)}${RESET}`
+        `  ${h.asset.slice(0, 12).padEnd(13)}${String(h.amount).padStart(13)}` +
+          `${(value === null ? "—" : `$${value.toFixed(2)}`).padStart(11)}` +
+          `${`${alloc.toFixed(1)}%`.padStart(8)}${chCol}${chTxt.padStart(8)}${RESET}${pnlTxt}`
       );
     }
   }
