@@ -1,11 +1,11 @@
 {
-  "name": "tradelog",
+  "name": "assay",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Pre-trade safety checks, trade journal and edge analysis for manual memecoin trading",
   "bin": {
-    "tradelog": "./src/cli.ts"
+    "assay": "./src/cli.ts"
   },
   "scripts": {
     "check": "node src/cli.ts check",

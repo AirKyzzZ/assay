@@ -13,6 +13,14 @@ grounds, `#E7E3DD` on dark. Never recoloured, never on a busy image, never rotat
 | `avatar.svg` | 400×400 profile picture |
 | `banner.svg` | 1500×500 header |
 | `favicon.svg` | 64×64, rounded container |
+| `source/` | Original artwork as drawn. `transparent-*.svg` are the clean ones. |
+| `png/` | Rasterised exports at platform sizes |
+
+The wordmark in `lockup-*.svg` and `banner.svg` is **converted to outlines** — no font
+required, nothing to fall back. Nunito is OFL-licensed, so embedding the outlines is fine.
+
+`source/black.svg` and `source/white.svg` carry baked full-bleed background rectangles and
+are not transparent. Use the `transparent-*` pair for anything composited.
 
 **Clearspace** equal to the mark's own width on every side.
 **Minimum sizes:** 48px for the mark alone, 200px wide for the lockup.
@@ -87,8 +95,11 @@ The CLI is the brand's most-used surface. Its palette is the brand palette.
 **Don't** put P&L in the banner. The position is method, not returns.
 **Don't** use the mark below 48px. Use the wordmark.
 
-## Before distributing
+## Rebuilding
 
-`lockup-*.svg` and `banner.svg` set `ASSAY` as live text in Nunito Black. Where the font is
-absent it falls back silently — usually to a serif — and the wordmark breaks completely.
-Install Nunito and convert text to paths before handing files to any platform.
+The wordmark is outlined, so the SVGs are self-contained and safe to hand to any platform.
+If the wordmark ever changes, regenerate the outlines with `fontTools` rather than setting
+live text — a missing Nunito falls back to a serif and breaks the mark completely.
+
+The two tagline lines and `ASSAY.TRADE` in `banner.svg` are still live text, in Nunito and a
+generic monospace. They degrade gracefully; the wordmark would not have.

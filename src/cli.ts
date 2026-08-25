@@ -17,9 +17,9 @@ const YELLOW = "\x1b[33m";
 const RESET = "\x1b[0m";
 
 const USAGE = `
-${BOLD}tradelog${RESET} — pre-trade checks, journal and edge analysis
+${BOLD}assay${RESET} — pre-trade checks, journal and edge analysis
 
-  ${BOLD}check${RESET} <chain> <address>       run the seven checks
+  ${BOLD}check${RESET} <chain> <address>       run the safety checks
   ${BOLD}log${RESET} <buy|sell|pass> [flags]   record an entry
   ${BOLD}review${RESET}                        forward return on everything, including passes
   ${BOLD}stats${RESET}                         edge summary vs holding SOL
@@ -106,7 +106,7 @@ async function cmdMarket(): Promise<void> {
 async function cmdScan(args: string[]): Promise<void> {
   const chain = args[0] ?? "solana";
   if (!isChain(chain)) {
-    console.error("usage: tradelog scan [solana|base]");
+    console.error("usage: assay scan [solana|base]");
     process.exitCode = 1;
     return;
   }
@@ -139,7 +139,7 @@ async function cmdScan(args: string[]): Promise<void> {
 async function cmdCheck(args: string[]): Promise<void> {
   const [chain, address] = args;
   if (!isChain(chain) || !address) {
-    console.error("usage: tradelog check <solana|base> <address>");
+    console.error("usage: assay check <solana|base> <address>");
     process.exitCode = 1;
     return;
   }
@@ -177,7 +177,7 @@ async function cmdCheck(args: string[]): Promise<void> {
 async function cmdLog(args: string[]): Promise<void> {
   const kind = args[0] as EntryKind;
   if (kind !== "buy" && kind !== "sell" && kind !== "pass") {
-    console.error("usage: tradelog log <buy|sell|pass> --chain <c> --address <a> [flags]");
+    console.error("usage: assay log <buy|sell|pass> --chain <c> --address <a> [flags]");
     process.exitCode = 1;
     return;
   }

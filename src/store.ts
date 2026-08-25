@@ -2,7 +2,7 @@ import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { Entry } from "./types.ts";
 
-const DATA_FILE = process.env.TRADELOG_FILE ?? resolve(process.cwd(), "data/entries.jsonl");
+const DATA_FILE = process.env.ASSAY_FILE ?? resolve(process.cwd(), "data/entries.jsonl");
 
 export async function append(entry: Entry): Promise<void> {
   await mkdir(dirname(DATA_FILE), { recursive: true });
