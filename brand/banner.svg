@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 500" width="1500" height="500" role="img" aria-label="Assay banner">
+  <rect width="1500" height="500" fill="#14171A"/>
+
+  <g stroke="#B8873F" stroke-opacity="0.16" stroke-width="3" stroke-linecap="butt">
+    <path d="M1120 138 V362"/>
+    <path d="M1164 172 V362"/>
+    <path d="M1208 118 V362"/>
+    <path d="M1252 196 V362"/>
+    <path d="M1296 152 V362"/>
+    <path d="M1340 224 V362"/>
+    <path d="M1384 166 V362"/>
+  </g>
+  <path d="M1108 362 H1396" stroke="#B8873F" stroke-opacity="0.32" stroke-width="3"/>
+
+  <g transform="translate(300 178) scale(2.05)" fill="none" stroke="#B8873F"><path d="M32 3 L59.5 18.75 L59.5 53.25 L32 69 L4.5 53.25 L4.5 18.75 Z" stroke-width="4" stroke-linejoin="miter"/><path d="M18 54 L32 18 L46 54" stroke-width="4.6" stroke-linejoin="miter" stroke-linecap="butt"/><path d="M23.4 40 H31.5" stroke-width="4.6" stroke-linecap="butt"/></g>
+
+  <text x="452" y="246" fill="#F3F2EF"
+        font-family="'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace"
+        font-size="72" font-weight="500" letter-spacing="13">ASSAY</text>
+
+  <text x="456" y="300" fill="#6B7378"
+        font-family="'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif"
+        font-size="25" font-weight="400">Instrumented memecoin trading.</text>
+  <text x="456" y="336" fill="#6B7378"
+        font-family="'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif"
+        font-size="25" font-weight="400">Code, checks, and numbers — losses included.</text>
+
+  <path d="M300 400 H1200" stroke="#DCDAD5" stroke-opacity="0.1" stroke-width="2"/>
+  <text x="300" y="432" fill="#6B7378" fill-opacity="0.75"
+        font-family="'IBM Plex Mono', ui-monospace, Menlo, monospace"
+        font-size="19" letter-spacing="2.4">ASSAY.TRADE</text>
+</svg>
