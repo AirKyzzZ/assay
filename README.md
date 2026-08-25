@@ -12,6 +12,7 @@
 [![Runtime deps](https://img.shields.io/badge/runtime%20deps-0-B8873F?style=flat-square)](package.json)
 [![API keys](https://img.shields.io/badge/API%20keys-none-B8873F?style=flat-square)](#data-sources)
 [![Build step](https://img.shields.io/badge/build%20step-none-7A7570?style=flat-square)](#install)
+[![License](https://img.shields.io/badge/license-MIT-7A7570?style=flat-square)](LICENSE)
 
 </div>
 
